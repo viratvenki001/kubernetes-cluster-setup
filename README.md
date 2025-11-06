@@ -116,3 +116,174 @@ Finally, verify on the master:
 
 kubectl get nodes
 #should see all master and worker node listed and ready
+
+
+
+
+
+# Kubernetes Cluster Setup Guide
+
+This document provides a complete step-by-step guide to set up a Kubernetes cluster (1 Master + Worker Nodes) on Ubuntu 22.04.
+
+---
+
+## ✅ System Requirements
+
+* **Master Node:** Minimum 2 CPU cores, 4 GB RAM
+* **Worker Node(s):** Minimum 2 CPU cores, 2 GB RAM
+* **Operating System:** Ubuntu 22.04
+
+---
+
+# 1. Steps for **Both Master and Worker Nodes**
+
+## ✅ 1. Update System Packages
+
+```
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y apt-transport-https ca-certificates curl gpg
+```
+
+## ✅ 2. Disable Swap
+
+```
+sudo swapoff -a
+sudo sed -i '/ swap / s/^/#/' /etc/fstab
+```
+
+## ✅ 3. Enable Kernel Modules
+
+```
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+```
+
+## ✅ 4. Apply sysctl Settings
+
+```
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+EOF
+
+sudo sysctl --system
+```
+
+## ✅ 5. Install Container Runtime (Containerd)
+
+```
+sudo apt install -y containerd
+```
+
+### Configure containerd
+
+```
+sudo mkdir -p /etc/containerd
+containerd config default | sudo tee /etc/containerd/config.toml >/dev/null
+sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+sudo systemctl restart containerd
+sudo systemctl enable containerd
+```
+
+## ✅ 6. Install Kubernetes Tools
+
+### Add Kubernetes Repo
+
+```
+sudo curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | \
+sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] \
+https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /" | \
+sudo tee /etc/apt/sources.list.d/kubernetes.list
+```
+
+### Install kubeadm, kubelet, kubectl
+
+```
+sudo apt update
+sudo apt install -y kubelet kubeadm kubectl
+sudo apt-mark hold kubelet kubeadm kubectl
+sudo systemctl enable --now kubelet
+```
+
+---
+
+# 2. Steps for **Master Node Only**
+
+## ✅ 1. Initialize Kubernetes Master
+
+```
+sudo kubeadm init
+```
+
+✅ Save the **kubeadm join command** displayed at the end.
+
+## ✅ 2. Configure kubectl
+
+```
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+## ✅ 3. Verify Node Status
+
+```
+kubectl get nodes
+```
+
+Master will be **NotReady** until networking is installed.
+
+## ✅ 4. Install Calico Network Addon
+
+```
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.2/manifests/calico.yaml
+```
+
+After 2-3 minutes:
+
+```
+kubectl get nodes
+kubectl get pods -A
+```
+
+All pods should be Running.
+
+---
+
+# 3. Steps for **Worker Node(s)**
+
+Run the join command obtained from `kubeadm init`, example:
+
+```
+sudo kubeadm join 192.168.56.10:6443 --token <token> \
+    --discovery-token-ca-cert-hash sha256:<hash>
+```
+
+---
+
+# ✅ Final Verification (Run on Master)
+
+```
+kubectl get nodes
+```
+
+You should see **Master + Worker nodes** in **Ready** state.
+
+---
+
+If you'd like, I can also generate:
+
+* A PDF version
+* A diagram of Kubernetes architecture
+* A cheat sheet
+
+Just tell me!
+
